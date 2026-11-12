@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0b1720">
+  <title>朔望月</title>
+  <link rel="stylesheet" href="styles.css">
+  <script defer src="数据/牌桌数据.js"></script>
+  <script defer src="rules.js"></script>
+  <script defer src="music.js"></script>
+  <script defer src="录音/播报素材.js"></script>
+  <script defer src="录音/胜利语音.js"></script>
+  <script defer src="voice.js"></script>
+  <script defer src="app.js"></script>
+</head>
+<body>
+  <main>
+    <section id="lobby" class="lobby">
+      <h1>朔望月</h1>
+      <label>总人数
+        <select id="player-count"><option value="6">6 人</option><option value="7">7 人</option><option value="8">8 人</option></select>
+      </label>
+      <button id="start-game" class="primary" disabled>开始牌局</button>
+      <p id="load-error" role="alert" hidden></p>
+    </section>
+    <section id="game" hidden>
+      <header class="hud">
+        <div class="round"><span id="round-label"></span><strong id="hand-label"></strong></div>
+        <div class="controls">
+          <button id="calendar">节气与节日</button><button id="notebook">计数本</button><button id="pause">暂停</button>
+          <button id="music" aria-pressed="true">音乐：开</button><button id="restart">重开</button><button id="exit">退出</button>
+        </div>
+      </header>
+      <div id="moon-track" class="moon-track" aria-label="月相进度"></div>
+      <section class="table-area" aria-label="俯视牌桌">
+        <div class="felt"></div>
+        <div id="seats"></div>
+        <div class="community">
+          <div id="public-cards" class="cards"></div>
+          <div id="pot" class="pot"></div>
+        </div>
+        <div id="result" class="result" hidden></div>
+      </section>
+      <div id="turn-status" class="turn-status" role="status"></div>
+      <section class="player-zone" aria-label="玩家操作">
+        <div class="player-meta"><strong>玩家</strong><span id="player-chips"></span></div>
+        <div id="player-cards" class="cards"></div>
+        <div class="actions">
+          <label>下注额 <select id="raise-amount" aria-label="下注或加注金额"><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option></select></label>
+          <button id="raise">下注</button><button id="call">跟注</button>
+          <button id="fold">弃牌</button><button id="allin">梭哈</button><button id="speak">发言</button>
+        </div>
+      </section>
+      <footer class="table-footer">
+        <section class="action-log" aria-labelledby="log-title">
+          <header><strong id="log-title">行动记录</strong><button id="clear-log" type="button">清空</button></header>
+          <ol id="log-entries" tabindex="0" aria-label="本局行动记录"></ol>
+        </section>
+        <button id="skip-voice" type="button" disabled>跳过播报</button>
+      </footer>
+      <p class="rotate-hint">横屏可以看清整张牌桌</p>
+    </section>
+  </main>
+  <div id="pause-shade" hidden></div>
+  <dialog id="pause-dialog" class="floating-window" aria-labelledby="pause-title">
+    <header class="window-bar" data-drag><h2 id="pause-title">游戏已暂停</h2></header>
+    <div class="dialog-body">
+      <div class="pause-actions">
+        <button id="pause-notebook">计数本</button><button id="pause-calendar">节气与节日</button>
+        <button id="pause-music" aria-pressed="true">音乐：开</button>
+        <button id="resume" class="primary">继续</button>
+      </div>
+    </div>
+  </dialog>
+  <dialog id="notebook-window" class="floating-window" aria-labelledby="notebook-title">
+    <header class="window-bar" data-drag>
+      <h2 id="notebook-title">计数本</h2><form method="dialog"><button aria-label="关闭计数本">×</button></form>
+    </header>
+    <div class="window-content">
+      <textarea id="note-editor" class="notebook" aria-label="计数本内容" placeholder="写下数字或文字…"></textarea>
+      <div class="window-actions"><button id="notebook-switch">节气与节日</button><button id="notebook-both">同时打开</button></div>
+    </div>
+  </dialog>
+  <dialog id="calendar-window" class="floating-window" aria-labelledby="calendar-title">
+    <header class="window-bar" data-drag>
+      <h2 id="calendar-title">节气与节日</h2><form method="dialog"><button aria-label="关闭节气与节日">×</button></form>
+    </header>
+    <div class="window-content">
+      <div id="calendar-content" class="calendar-list"></div>
+      <div class="window-actions"><button id="calendar-switch">计数本</button><button id="calendar-both">同时打开</button></div>
+    </div>
+  </dialog>
+  <dialog id="info-dialog">
+    <div class="dialog-body"><form method="dialog" class="close"><button aria-label="关闭">×</button></form><div id="info-content"></div></div>
+  </dialog>
+</body>
+</html>
