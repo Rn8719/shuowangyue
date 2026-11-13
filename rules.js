@@ -62,27 +62,30 @@ const Rules = (() => {
     const pairs = ranks.filter(rank => counts[rank] >= 2);
     if (three) {
       const pair = pairs.find(rank => rank !== three);
-      return pair ? [5, three, pair] : [4, three];
+      if (pair) return [5, three, pair];
     }
     const flush = seasonal.findLastIndex(count => count >= 5);
-    if (flush !== -1) return [3, flush];
+    if (flush !== -1) return [4, flush];
+    if (three) return [3, three];
     if (pairs.length >= 2) return [2, ...pairs.slice(0, 2)];
     if (pairs.length) return [1, pairs[0]];
     return [0, ...ranks.filter(rank => counts[rank]).slice(0, 5)];
   }
 
   class Match {
-    constructor(cards, count, roundLimit = 4, startingChips = startingStacks[roundLimit]) {
+    constructor(cards, count, roundLimit = 4, startingChips = startingStacks[roundLimit], humans) {
       if (!Number.isInteger(roundLimit) || roundLimit < 1 || roundLimit > 4 ||
           !Number.isInteger(startingChips) || startingChips < 1) throw Error('无效的对局设置');
       this.cards = cards;
+      this.multiplayer = Boolean(humans);
       this.roundLimit = roundLimit;
       this.round = 1;
       this.hand = 1;
       this.carry = 0;
       const profiles = shuffle([...styles, ...Array.from({ length: count - 4 }, () => styles[randomInt(3)])]);
       this.seats = Array.from({ length: count }, (_, id) => ({
-        id, name: id ? `人机${id}` : '玩家', chips: startingChips, style: id ? profiles[id - 1] : null
+        id, name: humans?.[id] ?? (id ? `人机${id}` : '玩家'), chips: startingChips,
+        human: humans ? id < humans.length : id === 0, style: profiles[id - 1] ?? '综合'
       }));
       this.startHand();
     }
@@ -134,7 +137,7 @@ const Rules = (() => {
       const contenders = this.contenders;
       const opponent = contenders.find(other => other !== seat);
       const canInitiateAllIn = contenders.length === 2 &&
-        (seat.id === 0 || opponent.id !== 0 || this.round === this.roundLimit);
+        (seat.human || !opponent.human || this.round === this.roundLimit);
       const allInTotal = canInitiateAllIn
         ? Math.min(seat.chips + seat.committed, opponent.chips + opponent.committed) : 0;
       const opening = this.target === 0;
@@ -187,10 +190,23 @@ const Rules = (() => {
       seat.action = label;
       const action = { id: seat.id, label };
       this.history.push(action);
+      this.checkBetting();
+      return action;
+    }
+
+    foldSeat(seat, label) {
+      if (this.result || seat.folded || !this.playing.includes(seat)) return;
+      seat.folded = true;
+      seat.action = label;
+      this.pending = this.pending.filter(other => other !== seat);
+      this.history.push({ id: seat.id, label });
+      this.checkBetting();
+    }
+
+    checkBetting() {
       const contenders = this.contenders;
       if (contenders.length === 1) this.settle(contenders);
       else if (!this.pending.length || this.canRunOut(contenders)) this.finishBetting(contenders);
-      return action;
     }
 
     canRunOut(contenders) {
@@ -239,7 +255,7 @@ const Rules = (() => {
       const remainder = pot - award * winners.length;
       for (const winner of winners) winner.chips += award;
       const stillIn = this.playing.filter(seat => seat.chips > 0 && !seat.insolvent);
-      const eliminated = stillIn.length <= 1 || !stillIn.some(seat => seat.id === 0);
+      const eliminated = stillIn.length <= 1 || (!this.multiplayer && !stillIn.some(seat => seat.id === 0));
       const final = this.round === this.roundLimit && this.hand === 8 || eliminated;
       for (const seat of this.playing) {
         if (!stillIn.includes(seat)) seat.out = (this.round - 1) * 8 + this.hand;

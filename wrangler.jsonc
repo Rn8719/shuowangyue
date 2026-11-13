@@ -1,0 +1,16 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "shuowangyue",
+  "main": "dist/server/index.js",
+  "compatibility_date": "2026-11-13",
+  "workers_dev": true,
+  "build": { "command": "node build-site.cjs" },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "shuowangyue",
+      "database_id": "238f3ac8-5502-49bb-8ee5-265b02b468ee",
+      "migrations_dir": "drizzle"
+    }
+  ]
+}

@@ -40,6 +40,11 @@ button:disabled, select:disabled { opacity: .38; cursor: default; }
 .lobby h1 { font-family: "Songti SC", SimSun, serif; font-size: 3rem; letter-spacing: .16em; margin: 0 0 1.5rem; }
 .lobby label { display: block; margin-bottom: 1rem; }
 .starting-chips { margin: 0 0 1rem; color: var(--muted); font-size: .9rem; }
+#online-lobby input { width: min(100%, 13rem); padding: .5rem; font: inherit; }
+#online-lobby label { margin-top: .8rem; }
+#online-members { list-style: none; padding: 0; }
+#online-members li { margin: .3rem 0; }
+#online-message { overflow-wrap: anywhere; }
 .hud {
   display: flex; justify-content: space-between; align-items: center; gap: .4rem;
   padding: .5rem max(.7rem, env(safe-area-inset-right)) .5rem max(.7rem, env(safe-area-inset-left));

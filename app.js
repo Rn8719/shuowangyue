@@ -11,6 +11,8 @@ const pauseDialog = get('pause-dialog');
 const notebookWindow = get('notebook-window');
 const calendarWindow = get('calendar-window');
 const noteEditor = get('note-editor');
+let onlineMatch = null;
+const localSeat = () => onlineMatch?.self ?? 0;
 const createUtterance = window.SpeechSynthesisUtterance ? text => new SpeechSynthesisUtterance(text) : null;
 const victoryLine = '都是同龄人，我原本没想降维打击';
 let announcementActive = false;
@@ -271,7 +273,8 @@ function wagerPile(amount, direction) {
 function renderSeats() {
   const seats = match.playing.map((seat, index) => {
     const item = element('article', 'seat');
-    const angle = Math.PI / 2 + index * 2 * Math.PI / match.playing.length;
+    const ownIndex = Math.max(0, match.playing.findIndex(player => player.id === localSeat()));
+    const angle = Math.PI / 2 + (index - ownIndex) * 2 * Math.PI / match.playing.length;
     item.style.left = `${50 + 40 * Math.cos(angle)}%`;
     item.style.top = `${50 + 35 * Math.sin(angle)}%`;
     const active = !announcing && match.actor === seat;
@@ -283,7 +286,7 @@ function renderSeats() {
     item.append(element('strong', '', seat.name),
       element('span', 'seat-action', action),
       element('span', 'stack', `☾ ${seat.chips}`));
-    if (seat.id) {
+    if (seat.id !== localSeat()) {
       const hand = element('div', 'cards seat-cards');
       hand.append(cardTile(seat.cards[0], '', 'small', handSlot(seat, 0)),
         ...seat.cards.slice(1).map((_, index) => cardTile(null, '', 'small', handSlot(seat, index + 1))));
@@ -335,7 +338,7 @@ function renderResult() {
   }
   if (remainder && !final) panel.append(element('p', '', `${remainder} 枚代币顺延至下一局`));
   if (final) {
-    const playerRank = rankings.find(entry => entry.seat.id === 0);
+    const playerRank = rankings.find(entry => entry.seat.id === localSeat());
     panel.append(element('h3', '', `游戏结束 · 你的排名第 ${playerRank.place} 名`));
     const standings = element('div', 'standings');
     standings.append(...rankings.map(({ seat, place }) =>
@@ -343,9 +346,10 @@ function renderResult() {
     panel.append(standings);
   }
   const next = element('button', 'primary', final ? '返回开局' : '下一局');
-  next.disabled = announcing;
+  next.disabled = announcing || Boolean(onlineMatch && !final && match.seats[localSeat()].out);
   next.onclick = () => {
     if (final) return exit();
+    if (onlineMatch) return onlineMatch.send('next');
     unlockDealAudio();
     tauntVoice.reset();
     match.next();
@@ -357,7 +361,7 @@ function renderResult() {
 }
 
 function renderControls() {
-  const yourTurn = !announcing && match.actor?.id === 0;
+  const yourTurn = !announcing && match.actor?.id === localSeat() && !onlineMatch?.offline;
   const options = yourTurn ? match.options() : null;
   const amount = get('raise-amount');
   const raiseAvailable = Boolean(options && !options.offered && options.maxRaise > 0);
@@ -383,7 +387,7 @@ function render() {
     if (index + 1 === match.hand) node.setAttribute('aria-current', 'step');
     else node.removeAttribute('aria-current');
   });
-  const player = match.seats[0];
+  const player = match.seats[localSeat()];
   get('player-chips').textContent = `☾ ${player.chips} 枚`;
   get('player-cards').replaceChildren(cardTile(player.cards[0], '明牌', '', handSlot(player, 0)),
     ...player.cards.slice(1).map((card, index) => cardTile(card, `暗牌 ${index + 1}`, '', handSlot(player, index + 1))));
@@ -399,14 +403,15 @@ function renderClock() {
   const status = get('turn-status');
   status.replaceChildren();
   if (lastAnnouncement) status.append(element('span', 'last-action', lastAnnouncement));
+  if (onlineMatch?.offline) status.append(element('strong', '', '连接中断，正在重连…'));
   if (announcing) {
     status.append(element('strong', '', dealing ? '正在发牌' : '正在播报'));
     return;
   }
   const actor = match?.actor;
   if (!actor) return;
-  status.append(element('strong', '', actor.id ? `${actor.name}行动中` : '轮到你行动'));
-  if (actor.id) return;
+  status.append(element('strong', '', actor.id === localSeat() ? '轮到你行动' : `${actor.name}行动中`));
+  if (actor.id !== localSeat() && (!onlineMatch || !actor.human)) return;
   status.append(element('span', 'clock'));
   updateClockDisplay();
 }
@@ -414,11 +419,13 @@ function renderClock() {
 function updateClockDisplay() {
   const clock = get('turn-status').querySelector('.clock');
   if (!clock || !match?.actor) return;
-  const remaining = Math.max(0, Math.ceil((playerTurnTime - elapsed) / 1000));
+  const remaining = Math.max(0, Math.ceil((onlineMatch
+    ? onlineMatch.deadline - Date.now()
+    : playerTurnTime - elapsed) / 1000));
   const warning = remaining <= 10;
   clock.textContent = `剩余 ${remaining} 秒`;
   clock.classList.toggle('urgent', warning);
-  if (warning && !warned && !paused && remaining > 0) {
+  if (warning && !warned && !paused && remaining > 0 && match.actor.id === localSeat()) {
     warned = true;
     announceText('还剩十秒');
   }
@@ -543,6 +550,7 @@ function start() {
 }
 
 function exit() {
+  if (onlineMatch) return onlineMatch.leave();
   stopClock();
   activeFlight?.cancel();
   activeFlight = null;
@@ -580,7 +588,10 @@ get('start-game').onclick = get('restart').onclick = start;
 get('exit').onclick = exit;
 for (const action of ['call', 'fold', 'allin', 'raise']) {
   get(action).onclick = () => {
-    if (match.actor?.id === 0) perform(action, Number(get('raise-amount').value));
+    if (match.actor?.id !== localSeat()) return;
+    const amount = Number(get('raise-amount').value);
+    if (onlineMatch) onlineMatch.send('act', { action, amount });
+    else perform(action, amount);
   };
 }
 function populateCalendar() {
@@ -647,6 +658,15 @@ get('calendar').onclick = get('pause-calendar').onclick = get('notebook-both').o
 get('notebook').onclick = get('pause-notebook').onclick = get('calendar-both').onclick = () => openWindow(notebookWindow);
 get('notebook-switch').onclick = () => { notebookWindow.close(); openWindow(calendarWindow); };
 get('calendar-switch').onclick = () => { calendarWindow.close(); openWindow(notebookWindow); };
+get('rules-help').onclick = () => showInfo(
+  element('h2', '', '规则'),
+  element('h3', '', '德州扑克牌型大小'),
+  element('p', '', '五条 > 顺子 > 四条 > 三带二 > 同花 > 三条 > 两对 > 一对 > 单牌'),
+  element('h3', '', '21 点规则'),
+  element('p', '', '数字加起来越接近 21 越大，超过 21 算爆掉，直接算输（不过该游戏上限不是 21 点哦）。'),
+  element('p', '', '每局游戏只会有一种规则。'),
+  element('p', '', '剩下的规则需要你们自己探索。')
+);
 get('clear-log').onclick = clearLog;
 get('skip-voice').onclick = () => (announcementActive ? voice : tauntVoice).skip();
 get('speak').onclick = () => {
@@ -668,7 +688,7 @@ get('music').onclick = get('pause-music').onclick = () => {
   syncMusic();
 };
 get('pause').onclick = () => {
-  if (paused || !match) return;
+  if (paused || !match || onlineMatch) return;
   paused = true;
   if (match.actor?.id === 0 && !announcing) elapsed = performance.now() - started;
   stopClock();
