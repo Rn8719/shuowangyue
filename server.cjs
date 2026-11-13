@@ -54,7 +54,7 @@ function createServer() {
           : operation === 'join' ? lobby.join(code, data.name)
           : lobby.request(code, token, operation, data);
         if (result === null) {
-          res.writeHead(403).end(JSON.stringify({ error: '座位已失效或已被移出房间' }));
+          res.writeHead(403).end(JSON.stringify({ error: '房间已解散，或你已离开房间' }));
           return;
         }
         res.end(JSON.stringify(result));

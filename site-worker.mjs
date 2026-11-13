@@ -45,6 +45,20 @@ function restore(payload) {
 
 const json = (body, status = 200) => Response.json(body, { status, headers: { 'Cache-Control': 'no-store' } });
 
+async function pruneRooms(db) {
+  for (let attempt = 0; attempt < 8; attempt++) {
+    const row = await db.prepare('SELECT revision, payload FROM friend_state WHERE id = 1').first();
+    if (!row) return;
+    const lobby = restore(row.payload);
+    const count = lobby.rooms.size;
+    for (const room of lobby.rooms.values()) lobby.expireRoom(room, Date.now());
+    if (lobby.rooms.size === count) return;
+    const saved = await db.prepare('UPDATE friend_state SET revision = revision + 1, payload = ? WHERE id = 1 AND revision = ?')
+      .bind(serialize(lobby), row.revision).run();
+    if (saved.meta.changes === 1) return;
+  }
+}
+
 async function handleApi(request, url, db) {
   if (request.method !== 'POST') return json({ error: '无效的请求方式' }, 405);
   const reader = request.body?.getReader();
@@ -76,7 +90,7 @@ async function handleApi(request, url, db) {
       result = operation === 'create' ? lobby.create(body.name, body.count, body.rounds, body.code)
         : operation === 'join' ? lobby.join(code, body.name) : lobby.request(code, token, operation, body);
     } catch (error) { return json({ error: error.message }, 400); }
-    if (result === null) return json({ error: '座位已失效或已被移出房间' }, 403);
+    if (result === null) return json({ error: '房间已解散，或你已离开房间' }, 403);
     const payload = serialize(lobby);
     const saved = row
       ? await db.prepare('UPDATE friend_state SET revision = revision + 1, payload = ? WHERE id = 1 AND revision = ?')
@@ -88,6 +102,9 @@ async function handleApi(request, url, db) {
 }
 
 export default {
+  async scheduled(_event, env) {
+    await pruneRooms(env.DB);
+  },
   async fetch(request, env) {
     const url = new URL(request.url);
     if (url.pathname.startsWith('/api/')) {

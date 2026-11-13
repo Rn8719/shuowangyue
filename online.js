@@ -46,7 +46,7 @@
     get('online-room').hidden = !session;
   }
 
-  function leave() {
+  function returnHome() {
     generation++;
     clearInterval(polling);
     clearInterval(clock);
@@ -65,6 +65,24 @@
     exit();
     get('lobby').hidden = true;
     get('mode-menu').hidden = false;
+  }
+
+  async function leave() {
+    if (!session) return returnHome();
+    if (busy) return;
+    busy = true;
+    pendingCommand = null;
+    const epoch = generation;
+    try {
+      await request('leave');
+      if (epoch === generation) returnHome();
+    } catch (error) {
+      if (epoch !== generation) return;
+      if (error.revoked) returnHome();
+      else report(Error('退出未确认，请检查网络后重试'));
+    } finally {
+      if (epoch === generation) busy = false;
+    }
   }
 
   async function request(operation, body = {}, code = session?.code) {
@@ -169,7 +187,7 @@
 
   function report(error) {
     if (error.revoked) {
-      leave();
+      returnHome();
       showLobby();
     } else if (onlineMatch) {
       addLog(error.message);
@@ -189,7 +207,7 @@
     const epoch = generation;
     try {
       const snapshot = await request(operation, { ...body, serial });
-      if (epoch === generation) showState(snapshot);
+      if (epoch === generation && !busy) showState(snapshot);
     } catch (error) {
       if (epoch !== generation) return;
       if (operation === 'state' && onlineMatch && !error.revoked) {

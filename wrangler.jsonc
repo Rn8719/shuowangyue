@@ -4,6 +4,7 @@
   "main": "dist/server/index.js",
   "compatibility_date": "2026-11-13",
   "workers_dev": true,
+  "triggers": { "crons": ["* * * * *"] },
   "build": { "command": "node build-site.cjs" },
   "d1_databases": [
     {

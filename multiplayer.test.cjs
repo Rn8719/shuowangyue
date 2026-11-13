@@ -5,7 +5,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 const path = require('node:path');
-const { Lobby, disconnectMs } = require('./multiplayer.cjs');
+const { Lobby, disconnectMs, hostTimeoutMs } = require('./multiplayer.cjs');
 const { createServer } = require('./server.cjs');
 const Rules = require('./rules.js');
 const cards = Rules.prepare(vm.runInNewContext(fs.readFileSync(path.join(__dirname, '数据/牌桌数据.js'), 'utf8') + '\ncardRows'));
@@ -75,9 +75,44 @@ test('HTTP serves the game and lets independent clients start a friend room', as
     assert.equal(view.game.self, 1);
     assert.equal(view.game.seats[0].cards[1], null);
     assert(view.game.seats[1].cards[1]);
+    assert.equal((await ask('leave/' + host.code, {}, host.token)).status, 200);
+    assert.equal((await ask('state/' + host.code, {}, guest.token)).status, 403);
+    assert.equal((await ask('create', { name: '新房主', count: 6, rounds: 1, code: host.code })).status, 200);
   } finally {
     await new Promise(resolve => server.close(resolve));
   }
+});
+
+test('host timeout uses the last host heartbeat, and reconnect resets the deadline', () => {
+  let now = 0;
+  const lobby = new Lobby(cards, () => now);
+  const host = lobby.create('房主', 6, 2, '000123');
+  const guest = lobby.join(host.code, '好友');
+  now = hostTimeoutMs - 1;
+  assert(lobby.request(guest.code, guest.token, 'state', {}));
+  assert.throws(() => lobby.create('重复', 6, 2, host.code), /已存在/);
+  assert(lobby.request(host.code, host.token, 'state', {}));
+  now += hostTimeoutMs - 1;
+  lobby.tick();
+  assert(lobby.request(guest.code, guest.token, 'state', {}));
+  now++;
+  lobby.tick();
+  assert.equal(lobby.request(host.code, host.token, 'state', {}), null);
+  assert.equal(lobby.request(guest.code, guest.token, 'state', {}), null);
+  assert.equal(lobby.create('新房主', 6, 2, host.code).code, host.code);
+});
+
+test('guest leaving preserves the room; host leaving releases a renamed room immediately', () => {
+  const lobby = new Lobby(cards);
+  const host = lobby.create('房主', 6, 2, '000123');
+  const guest = lobby.join(host.code, '好友');
+  assert.deepEqual(lobby.request(guest.code, guest.token, 'leave', {}), { left: true });
+  assert.equal(lobby.request(host.code, host.token, 'state', {}).members.length, 1);
+  const other = lobby.join(host.code, '另一位好友');
+  lobby.request(host.code, host.token, 'rename', { code: '000321' });
+  assert.deepEqual(lobby.request(host.code, host.token, 'leave', {}), { left: true });
+  assert.equal(lobby.request(other.code, other.token, 'state', {}), null);
+  assert.equal(lobby.create('新房主', 6, 2, '000321').code, '000321');
 });
 
 test('six-digit room numbers are unique and renaming preserves seats', () => {

@@ -19,7 +19,7 @@ const lobby = read('multiplayer.cjs')
   .replace("const { randomBytes } = require('node:crypto');",
     "const randomBytes = length => ({ toString: () => Array.from(crypto.getRandomValues(new Uint8Array(length)), byte => byte.toString(16).padStart(2, '0')).join('') });")
   .replace("const Rules = require('./rules.js');", '')
-  .replace('module.exports = { Lobby, disconnectMs };', '');
+  .replace(/^module\.exports = .*;$/m, '');
 const output = path.join(__dirname, 'dist/server');
 fs.mkdirSync(output, { recursive: true });
 fs.writeFileSync(path.join(output, 'index.js'),

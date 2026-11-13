@@ -4,6 +4,7 @@ const { randomBytes } = require('node:crypto');
 const Rules = require('./rules.js');
 
 const disconnectMs = 15000;
+const hostTimeoutMs = 10 * 60 * 1000;
 const turnMs = 120000;
 const botMs = 850;
 const roomLifetime = 2 * 60 * 60 * 1000;
@@ -49,6 +50,31 @@ class Lobby {
     this.seatRooms.delete(token);
   }
 
+  closeRoom(room) {
+    this.rooms.delete(room.code);
+    for (const token of room.members.keys()) this.seatRooms.delete(token);
+    room.members.clear();
+  }
+
+  expireRoom(room, now) {
+    const host = [...room.members.values()].find(member => member.id === room.host);
+    if (host && now - host.lastSeen < hostTimeoutMs && now - room.touched <= roomLifetime) return false;
+    this.closeRoom(room);
+    return true;
+  }
+
+  removePlayer(room, member, label) {
+    this.removeMember(room, member.token);
+    if (!room.game) return;
+    const game = room.game;
+    const seat = game.seats[member.seat];
+    const wasActor = game.actor === seat;
+    game.foldSeat(seat, label);
+    seat.human = false;
+    if (wasActor || game.result) this.schedule(room);
+    else room.serial++;
+  }
+
   join(code, name) {
     const room = this.rooms.get(code);
     if (!room) throw Error('房间不存在或已关闭');
@@ -62,11 +88,7 @@ class Lobby {
   tick() {
     const now = this.now();
     for (const room of this.rooms.values()) {
-      if (now - room.touched > roomLifetime) {
-        this.rooms.delete(room.code);
-        for (const token of room.members.keys()) this.seatRooms.delete(token);
-        continue;
-      }
+      if (this.expireRoom(room, now)) continue;
       this.advance(room, now);
     }
   }
@@ -112,11 +134,18 @@ class Lobby {
     const room = this.seatRooms.get(token);
     const member = room?.members.get(token);
     if (!member) return null;
-    this.advance(room, this.now());
-    room.touched = member.lastSeen = this.now();
+    const now = this.now();
+    if (this.expireRoom(room, now)) return null;
+    const host = member.id === room.host;
+    if (command === 'leave') {
+      if (host) this.closeRoom(room);
+      else this.removePlayer(room, member, '主动离房，弃牌');
+      return { left: true };
+    }
+    this.advance(room, now);
+    room.touched = member.lastSeen = now;
     member.connected = true;
     const game = room.game;
-    const host = member.id === room.host;
     switch (command) {
       case 'state': break;
       case 'rename': {
@@ -154,15 +183,7 @@ class Lobby {
         if (!host) throw Error('只有房主可以移出玩家');
         const target = [...room.members.values()].find(player => player.id === body.member);
         if (!target || target === member) throw Error('无法移出该玩家');
-        this.removeMember(room, target.token);
-        if (game) {
-          const seat = game.seats[target.seat];
-          const wasActor = game.actor === seat;
-          game.foldSeat(seat, '被移出房间，弃牌');
-          seat.human = false;
-          if (wasActor || game.result) this.schedule(room);
-          else room.serial++;
-        }
+        this.removePlayer(room, target, '被移出房间，弃牌');
         break;
       }
       default: throw Error('未知房间操作');
@@ -194,4 +215,4 @@ class Lobby {
   }
 }
 
-module.exports = { Lobby, disconnectMs };
+module.exports = { Lobby, disconnectMs, hostTimeoutMs };
