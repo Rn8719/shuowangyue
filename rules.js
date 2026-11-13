@@ -5,6 +5,7 @@ const Rules = (() => {
   const styles = ['稳健', '欺骗', '综合'];
   const pointLimit = 24;
   const raiseLimit = 2;
+  const startingStacks = [null, 10, 25, 35, 40];
   const randomInt = limit => {
     const sample = new Uint32Array(1);
     const ceiling = 2 ** 32 - (2 ** 32 % limit);
@@ -71,14 +72,17 @@ const Rules = (() => {
   }
 
   class Match {
-    constructor(cards, count) {
+    constructor(cards, count, roundLimit = 4, startingChips = startingStacks[roundLimit]) {
+      if (!Number.isInteger(roundLimit) || roundLimit < 1 || roundLimit > 4 ||
+          !Number.isInteger(startingChips) || startingChips < 1) throw Error('无效的对局设置');
       this.cards = cards;
+      this.roundLimit = roundLimit;
       this.round = 1;
       this.hand = 1;
       this.carry = 0;
       const profiles = shuffle([...styles, ...Array.from({ length: count - 4 }, () => styles[randomInt(3)])]);
       this.seats = Array.from({ length: count }, (_, id) => ({
-        id, name: id ? `人机${id}` : '玩家', chips: 50, style: id ? profiles[id - 1] : null
+        id, name: id ? `人机${id}` : '玩家', chips: startingChips, style: id ? profiles[id - 1] : null
       }));
       this.startHand();
     }
@@ -127,12 +131,16 @@ const Rules = (() => {
       const seat = this.actor;
       if (!seat) return null;
       const due = this.target - seat.committed;
-      const opponent = this.contenders.find(other => other !== seat);
-      const allInTotal = this.contenders.length === 2
+      const contenders = this.contenders;
+      const opponent = contenders.find(other => other !== seat);
+      const canInitiateAllIn = contenders.length === 2 &&
+        (seat.id === 0 || opponent.id !== 0 || this.round === this.roundLimit);
+      const allInTotal = canInitiateAllIn
         ? Math.min(seat.chips + seat.committed, opponent.chips + opponent.committed) : 0;
       const opening = this.target === 0;
       const atRaiseLimit = !opening && this.raises >= raiseLimit;
-      return { due, atRaiseLimit, maxRaise: atRaiseLimit ? 0 : Math.min(5, seat.chips - due),
+      const amountLimit = this.roundLimit <= 2 ? 3 : 5;
+      return { due, atRaiseLimit, maxRaise: atRaiseLimit ? 0 : Math.min(amountLimit, seat.chips - due),
         allIn: !this.offer && !atRaiseLimit && allInTotal > 0 && allInTotal >= this.target &&
           allInTotal > seat.committed && allInTotal > opponent.committed ? allInTotal : 0,
         offered: Boolean(this.offer), opening };
@@ -231,14 +239,14 @@ const Rules = (() => {
       const remainder = pot - award * winners.length;
       for (const winner of winners) winner.chips += award;
       const stillIn = this.playing.filter(seat => seat.chips > 0 && !seat.insolvent);
-      const final = this.round === 4 && this.hand === 8 || stillIn.length <= 1 ||
-        !stillIn.some(seat => seat.id === 0);
+      const eliminated = stillIn.length <= 1 || !stillIn.some(seat => seat.id === 0);
+      const final = this.round === this.roundLimit && this.hand === 8 || eliminated;
       for (const seat of this.playing) {
         if (!stillIn.includes(seat)) seat.out = (this.round - 1) * 8 + this.hand;
       }
       this.carry = final ? 0 : remainder;
       this.pending = [];
-      this.result = { winners, award, pot, remainder, final, scoreValue, rankings: final ? this.rankings() : [] };
+      this.result = { winners, award, pot, remainder, final, eliminated, scoreValue, rankings: final ? this.rankings() : [] };
     }
 
     rankings() {
@@ -272,8 +280,8 @@ const Rules = (() => {
     }
   }
 
-  function botDecision(view) {
-    const { options, self, stage, hand, round, pot, others, community } = view;
+  function estimateEquity(view) {
+    const { self, hand, others, community } = view;
     const exposed = new Set([community, ...self.cards, ...others.map(other => other.face)]);
     const unknown = view.cards.filter(card => !exposed.has(card));
     const opponents = others.filter(other => !other.folded);
@@ -292,7 +300,13 @@ const Rules = (() => {
       }
       if (tied) wins += 1 / tied;
     }
-    const equity = wins / 100;
+    return wins / 100;
+  }
+
+  function botDecision(view) {
+    const { options, self, stage, round, pot, others } = view;
+    const opponents = others.filter(other => !other.folded);
+    const equity = estimateEquity(view);
     const rivalStack = Math.max(...others.map(other => other.chips));
     const behind = self.chips < rivalStack;
     const headsUp = opponents.length === 1;
@@ -320,7 +334,7 @@ const Rules = (() => {
     return [options.opening ? 'fold' : 'call'];
   }
 
-  return { Match, prepare, score, compare, botDecision };
+  return { Match, prepare, score, compare, estimateEquity, botDecision, startingStacks: Object.freeze(startingStacks) };
 })();
 
 if (typeof module !== 'undefined') module.exports = Rules;

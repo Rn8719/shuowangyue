@@ -377,7 +377,7 @@ function renderControls() {
 }
 
 function render() {
-  get('round-label').textContent = roundNames[match.round - 1];
+  get('round-label').textContent = `${roundNames[match.round - 1]} / 共 ${match.roundLimit} 轮`;
   get('hand-label').textContent = `第 ${match.hand}/8 局`;
   [...get('moon-track').children].forEach((node, index) => {
     if (index + 1 === match.hand) node.setAttribute('aria-current', 'step');
@@ -530,7 +530,7 @@ function start() {
   voice.reset();
   tauntVoice.reset();
   pendingAction = null;
-  match = new Rules.Match(cards, Number(get('player-count').value));
+  match = new Rules.Match(cards, Number(get('player-count').value), Number(get('round-count').value));
   syncMusic();
   paused = false;
   resetHandTools();
@@ -571,6 +571,11 @@ if (cards.length !== 36) {
   get('load-error').textContent = '未能载入完整的 36 张牌。';
   get('load-error').hidden = false;
 }
+function updateStartingChips() {
+  get('starting-chips').textContent = `每人起始代币：${Rules.startingStacks[get('round-count').value]} 枚`;
+}
+get('round-count').onchange = updateStartingChips;
+updateStartingChips();
 get('start-game').onclick = get('restart').onclick = start;
 get('exit').onclick = exit;
 for (const action of ['call', 'fold', 'allin', 'raise']) {

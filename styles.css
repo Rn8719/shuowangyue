@@ -39,6 +39,7 @@ button:disabled, select:disabled { opacity: .38; cursor: default; }
 }
 .lobby h1 { font-family: "Songti SC", SimSun, serif; font-size: 3rem; letter-spacing: .16em; margin: 0 0 1.5rem; }
 .lobby label { display: block; margin-bottom: 1rem; }
+.starting-chips { margin: 0 0 1rem; color: var(--muted); font-size: .9rem; }
 .hud {
   display: flex; justify-content: space-between; align-items: center; gap: .4rem;
   padding: .5rem max(.7rem, env(safe-area-inset-right)) .5rem max(.7rem, env(safe-area-inset-left));

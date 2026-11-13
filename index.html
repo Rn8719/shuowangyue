@@ -5,14 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#0b1720">
   <title>朔望月</title>
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="styles.css?v=round-options">
   <script defer src="数据/牌桌数据.js"></script>
-  <script defer src="rules.js"></script>
+  <script defer src="rules.js?v=round-options"></script>
   <script defer src="music.js"></script>
   <script defer src="录音/播报素材.js"></script>
   <script defer src="录音/胜利语音.js"></script>
   <script defer src="voice.js"></script>
-  <script defer src="app.js"></script>
+  <script defer src="app.js?v=round-options"></script>
 </head>
 <body>
   <main>
@@ -21,6 +21,10 @@
       <label>总人数
         <select id="player-count"><option value="6">6 人</option><option value="7">7 人</option><option value="8">8 人</option></select>
       </label>
+      <label>对局轮数
+        <select id="round-count"><option value="1">一轮</option><option value="2">二轮</option><option value="3">三轮</option><option value="4" selected>四轮</option></select>
+      </label>
+      <p id="starting-chips" class="starting-chips"></p>
       <button id="start-game" class="primary" disabled>开始牌局</button>
       <p id="load-error" role="alert" hidden></p>
     </section>
